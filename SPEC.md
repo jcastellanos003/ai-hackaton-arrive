@@ -4,7 +4,14 @@
 
 ## 1. Project Overview
 
-A demo-ready, full-stack e-commerce application built for an AI Hackathon. The application showcases a realistic online shopping experience — product browsing, cart management, fake checkout, and order confirmation — using a modern frontend, Java REST backend, and MySQL database. The goal is a polished, functional demo that can be stood up quickly and demonstrated end-to-end without external service dependencies.
+**BuyMore — Shop the Look.** A demo-ready, full-stack e-commerce application built for an AI Hackathon. The application showcases a realistic online shopping experience — product browsing, cart management, fake checkout, and order confirmation — using a modern Next.js frontend, a Java Spring Boot REST backend, and an H2 in-memory database.
+
+**Current state:** Both frontend (`fe/e-commerce`) and backend (`be`) are implemented and integrated. A `docker-compose.yml` is available for a single-command full-stack startup. The frontend supports three run modes:
+- **Mock mode** (default when `NEXT_PUBLIC_API_URL` is not set) — uses an in-process mock layer with simulated network delay; no backend required.
+- **Real API mode** — set `NEXT_PUBLIC_API_URL=http://localhost:8080/v1` in `.env.local` to connect to the live Spring Boot backend.
+- **Docker Compose** — `docker compose up --build` starts frontend, backend, and H2 together with no local Java or Node install required.
+
+The goal is a polished, functional demo that can be stood up and demonstrated end-to-end without external service dependencies.
 
 ---
 
@@ -93,7 +100,7 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 | PD-01 | Display a primary product image with thumbnail gallery (minimum 1 image required). |
 | PD-02 | Display product name, description, price (formatted as currency), and category. |
 | PD-03 | Display available inventory count. |
-| PD-04 | Show a numeric quantity selector defaulting to 1; minimum is 1, maximum is `min(available inventory, 10)`. |
+| PD-04 | Show a numeric quantity selector defaulting to 1; minimum is 1, maximum is `product.inventory − quantity already in cart` for that product. |
 | PD-05 | **Add to Cart** button is disabled and shows "Out of Stock" when `inventory == 0`. |
 | PD-06 | Clicking **Add to Cart** adds the selected quantity to the cart and shows a brief toast notification. |
 | PD-07 | Display a **Related Products** section showing up to 4 products from the same category (excluding current). |
@@ -106,7 +113,7 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 | CA-02 | Quantity increment button is disabled when quantity equals available inventory. |
 | CA-03 | Quantity decrement button is disabled when quantity equals 1. |
 | CA-04 | Remove button deletes the line item from the cart with an undo option (3-second window). |
-| CA-05 | Display order summary: subtotal, estimated tax (fixed 10%), flat shipping ($4.99, free if subtotal > $75), and total. |
+| CA-05 | Display order summary: subtotal, taxes (8% of subtotal), shipping ($9.99, free when subtotal ≥ $100), and total — values sourced from the backend `CartResponse`. |
 | CA-06 | Display an **Empty Cart** state with a CTA to continue shopping when the cart has no items. |
 | CA-07 | Cart item count shown in the site header/navigation badge. |
 | CA-08 | **Proceed to Checkout** button is disabled when the cart is empty. |
@@ -129,10 +136,10 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 ### 5.5 Order Confirmation Page
 | ID | Requirement |
 |---|---|
-| OC-01 | Display a success icon and headline ("Order Placed!"). |
+| OC-01 | Display a success icon and headline ("Order Confirmed!"). |
 | OC-02 | Display a generated order number (returned from the backend). |
 | OC-03 | Display a list of purchased items with name, quantity, and line price. |
-| OC-04 | Display an estimated delivery date (current date + 5 business days, computed client-side). |
+| OC-04 | Display an estimated delivery date returned from the backend (`3–5 business days`, weekends excluded). Rendered as a human-readable date (e.g. "Monday, May 5"). |
 | OC-05 | Display order total. |
 | OC-06 | **Continue Shopping** button navigates back to the product listing page. |
 | OC-07 | Cart is cleared upon successful order placement. |
@@ -148,7 +155,7 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 | NF-03 | Responsive layout supporting viewports from 375 px (mobile) to 1440 px (desktop). |
 | NF-04 | No real payment data stored or transmitted anywhere. |
 | NF-05 | Frontend and backend can be started independently with a single command each. |
-| NF-06 | MySQL schema can be initialised and seeded with a single SQL script. |
+| NF-06 | H2 schema is auto-created from JPA entities on startup; 16 products are seeded by `DataSeeder` on first run — no external DB or SQL scripts needed. |
 | NF-07 | Codebase compiles without errors and all defined tests pass before demo. |
 | NF-08 | Environment secrets (DB credentials, API URL) sourced from `.env` files — never hardcoded. |
 
@@ -159,15 +166,16 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 ### 7.1 Tech Stack
 | Concern | Technology |
 |---|---|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript (strict mode) |
-| Styling | Tailwind CSS |
-| Component library | shadcn/ui |
+| Styling | Tailwind CSS v4 |
+| Component library | shadcn/ui (Base UI primitives) + lucide-react icons |
 | Server state / data fetching | TanStack Query v5 |
-| Form handling | React Hook Form + Zod |
-| Toast notifications | shadcn/ui `Sonner` |
-| Cart state | Zustand (persisted to `localStorage`) |
-| HTTP client | `fetch` (wrapped in TanStack Query) |
+| Form handling | React Hook Form v7 + Zod v4 |
+| Toast notifications | Sonner v2 |
+| Cart state | Server-side (Spring Boot) — identified by `X-Session-ID` UUID header |
+| HTTP client | `fetch` via `api-client.ts`; auto-routes to mock layer when `NEXT_PUBLIC_API_URL` is unset |
+| Package manager | pnpm (pnpm-workspace) |
 
 ### 7.2 Page Routes
 
@@ -177,63 +185,102 @@ A demo-ready, full-stack e-commerce application built for an AI Hackathon. The a
 | `/products/[id]` | `ProductDetailPage` | Full product info, add to cart |
 | `/cart` | `CartPage` | Cart items, order summary |
 | `/checkout` | `CheckoutPage` | Forms, fake payment, place order |
-| `/order-confirmation/[orderId]` | `OrderConfirmationPage` | Success state, order summary |
+| `/order-confirmation?orderId={uuid}` | `OrderConfirmationPage` | Success state, order summary (fetches order by query param) |
 
-### 7.3 Shared Components
+### 7.3 Key Components
 
-| Component | Purpose |
-|---|---|
-| `Header` | Logo, navigation links, cart icon with item count badge |
-| `ProductCard` | Reusable card for grid and related-products sections |
-| `StockBadge` | Renders "Low Stock" or "Out of Stock" badge |
-| `QuantitySelector` | Increment/decrement with min/max guard |
-| `CartSummary` | Subtotal / tax / shipping / total breakdown |
-| `EmptyState` | Generic empty state with icon, message, and CTA |
-| `LoadingSpinner` | Centered spinner for async page states |
-| `ErrorBoundary` | Catch-all error display for failed fetches |
+| Component | Location | Purpose |
+|---|---|---|
+| `Header` | `components/layout/` | Sticky top bar with live search input and cart badge (`99+` cap) |
+| `Sidebar` | `components/layout/` | Category navigation — fixed overlay on mobile, sticky column on desktop |
+| `ProductCard` / `ProductCardSkeleton` | `components/products/` | Product tile with inventory badge; skeleton for loading state |
+| `ProductGrid` | `components/products/` | Responsive 1→2→3→4 column grid with loading, error, and empty states |
+| `ProductFilters` | `components/products/` | Sort dropdown (price, name, rating, newest); category pills and search input |
+| `HeroBanner` | `components/products/` | Promotional hero block on the listing page |
+| `CartItem` | `components/cart/` | Single cart row with quantity controls and remove button |
+| `CartSummary` | `components/cart/` | Subtotal / tax / shipping / total breakdown |
+| `EmptyCart` | `components/cart/` | Empty state with CTA back to shop |
+| `OrderSummary` | `components/checkout/` | Read-only cart summary shown in the checkout sidebar |
+| `QueryProvider` | `components/providers/` | TanStack Query client setup and DevTools |
 
-### 7.4 TanStack Query Keys
+### 7.4 TanStack Query Keys & Cache Policy
 
-```
-['products']                   — full product list
-['products', id]               — single product
-['products', { category, q }]  — filtered product list
-['cart']                       — local cart (zustand, not fetched)
-```
-
-### 7.5 Cart State (Zustand)
+Keys defined in `lib/constants/query-keys.ts`:
 
 ```typescript
-interface CartItem {
-  productId: number;
-  name: string;
-  price: number;
-  imageUrl: string;
-  quantity: number;
-  availableInventory: number;
-}
-
-interface CartStore {
-  items: CartItem[];
-  addItem: (item: CartItem) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
-  removeItem: (productId: number) => void;
-  clearCart: () => void;
-}
+queryKeys.products.all              // ["products"]
+queryKeys.products.list(filters)    // ["products", "list", filters]
+queryKeys.products.detail(id)       // ["products", "detail", id]
+queryKeys.products.related(id, cat) // ["products", "related", id, category]
+queryKeys.products.categories       // ["products", "categories"]
+queryKeys.cart.all                  // ["cart"]
+queryKeys.orders.detail(id)         // ["orders", "detail", id]
 ```
+
+Cache policy:
+
+| Resource | `staleTime` |
+|---|---|
+| Products / Product detail / Related | 5 minutes |
+| Categories | 10 minutes |
+| Cart | 0 — always refetch |
+| Orders | 10 minutes |
+
+Cart mutations: `useUpdateCartItem` and `useRemoveFromCart` use **optimistic updates** with automatic rollback on error. `useAddToCart` sets query data directly from the returned `CartResponse`.
+
+### 7.5 Session Identity & Cart State
+
+The cart is fully server-side. There is no client-side cart store (no Zustand).
+
+`lib/utils/session.ts` generates a UUID v4 on first load and persists it in `localStorage` under the key `buymore_session_id`. This ID is sent as `X-Session-ID` on every cart and order request. The backend auto-creates a cart for new session IDs.
+
+```typescript
+// lib/types/cart.ts
+type CartItem = {
+  productId: string;   // UUID
+  product: Product;    // full product snapshot
+  quantity: number;
+};
+
+type Cart = {
+  id: string;
+  items: CartItem[];
+  subtotal: number;
+  taxes: number;
+  shipping: number;
+  total: number;
+};
+```
+
+Cart queries use `staleTime: 0` (always refetch). All cart mutations invalidate `queryKeys.cart.all`.
+
+**Mock layer differences** (active when `NEXT_PUBLIC_API_URL` is unset):
+- 13 seed products (vs 16 in the real backend seeder)
+- Cart and order state held in **module-level Maps** — persists across client-side navigation but resets on dev-server restart
+- Simulated 400–800 ms latency per call
+- Mock modules are dynamically imported and tree-shaken from production builds
 
 ### 7.6 Environment Variables (Frontend)
 
 ```env
-# .env.local
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api
+# fe/e-commerce/.env.local
+
+# Point at the real backend. Leave unset to use the mock layer.
+NEXT_PUBLIC_API_URL=http://localhost:8080/v1
+
+# Force mock mode even when API_URL is set (optional, for development)
+NEXT_PUBLIC_USE_MOCKS=false
 ```
 
+Mock mode is active when `NEXT_PUBLIC_API_URL` is unset **or** `NEXT_PUBLIC_USE_MOCKS=true`. Mocks simulate 400–800 ms of network latency and mirror the real API response shapes exactly.
+
 ### 7.7 Styling Conventions
-- Use Tailwind utility classes exclusively; no custom CSS files except global `globals.css` for base resets.
-- shadcn/ui components customised via `components.json` and Tailwind config only.
-- Consistent spacing scale: `p-4`, `gap-4`, `m-6`, etc.
-- Color tokens: primary = brand color defined in `tailwind.config.ts`; neutral grays for backgrounds.
+- Tailwind CSS v4: CSS-first configuration via `globals.css` (`@theme` directive). There is no `tailwind.config.ts`.
+- Use Tailwind utility classes exclusively; no custom CSS files other than `globals.css`.
+- shadcn/ui components customised via `components.json` only.
+- All cards: `rounded-2xl shadow-sm`. Product images: `object-cover` inside a fixed-aspect container.
+- Responsive grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`.
+- Font: Geist (variable, latin subset, loaded via `next/font`).
 
 ---
 
@@ -243,123 +290,124 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api
 | Concern | Technology |
 |---|---|
 | Language | Java 17 |
-| Framework | Spring Boot 3 |
-| Build tool | Maven |
-| Database access | Spring Data JPA + Hibernate |
-| Validation | Jakarta Bean Validation |
-| JSON | Jackson |
-| CORS | Spring MVC CORS config (allow `localhost:3000`) |
+| Framework | Spring Boot 3.2.5 |
+| Build tool | Maven 3.6+ |
+| Database | H2 in-memory (default); PostgreSQL switchable via properties |
+| Database access | Spring Data JPA + Hibernate 6 |
+| Validation | Jakarta Bean Validation (Hibernate Validator) |
+| JSON | Jackson (camelCase, `NON_NULL` serialization) |
+| Utilities | Lombok |
+| CORS | `CorsConfig.java` — allows `localhost:3000` and `*.vercel.app`; exposes `X-Session-ID` header |
 
 ### 8.2 Base URL
 ```
-http://localhost:8080/api
+http://localhost:8080/v1
 ```
 
-### 8.3 Standard Response Envelope
+### 8.3 Response Shapes
 
-**Success:**
+There is no single success/error wrapper. Response shapes vary by endpoint:
+
+**Product list** (`GET /v1/products`):
 ```json
 {
-  "data": { ... },
-  "success": true
+  "data": [ { /* ProductResponse */ } ],
+  "meta": { "page": 1, "limit": 20, "total": 16, "totalPages": 1 }
 }
 ```
 
-**Error:**
+**Single product, cart, order** — the object itself is returned directly (no outer wrapper):
 ```json
-{
-  "success": false,
-  "error": {
-    "code": "INSUFFICIENT_INVENTORY",
-    "message": "Product 'Blue Sneakers' only has 2 units in stock.",
-    "details": { "productId": 42, "requested": 5, "available": 2 }
-  }
-}
+{ "id": "uuid", "name": "...", ... }
 ```
+
+**All errors** — flat two-field envelope:
+```json
+{ "error": "Only 3 items left in stock", "code": "INSUFFICIENT_INVENTORY" }
+```
+
+Jackson is configured with `NON_NULL` — nullable fields (`rating`, `tags`, `phone`) are omitted from responses when null.
 
 ### 8.4 Endpoints
 
+All IDs are UUIDs. All cart and order endpoints require the `X-Session-ID: <uuid>` header.
+
 #### Products
 
-**GET /products**
-Returns the full product list, optionally filtered.
+**GET /v1/products** — paginated product list
 
-Query params:
-| Param | Type | Description |
+| Query param | Default | Description |
 |---|---|---|
-| `category` | string | Filter by category name (case-insensitive) |
-| `q` | string | Full-text search on product name and description |
+| `page` | `1` | 1-based page number |
+| `limit` | `20` | Items per page (max 100) |
+| `category` | — | Exact category name |
+| `search` | — | Full-text filter on name and description |
+| `is_featured` | — | `true` to return only featured products |
+| `sort` | `created_at_desc` | `price_asc`, `price_desc`, `name_asc`, `rating_desc` |
 
-Response `200`:
+Response `200`: `{ data: ProductResponse[], meta: { page, limit, total, totalPages } }`
+
+**GET /v1/products/categories** — category list with counts
+
+Response `200`: `{ data: [ { name: "Footwear", count: 5 }, ... ] }`
+
+> Must be declared before `/:id` — Spring matches the literal path `categories` first.
+
+**GET /v1/products/{id}** — single product
+
+Response `200`: `ProductResponse`; `404`: `PRODUCT_NOT_FOUND`
+
+**GET /v1/products/{id}/related** — up to 4 products in the same category (excluding `{id}`)
+
+Response `200`: `{ data: ProductResponse[] }`
+
 ```json
+// ProductResponse shape
 {
-  "data": [
-    {
-      "id": 1,
-      "name": "Blue Sneakers",
-      "description": "...",
-      "price": 59.99,
-      "category": "Footwear",
-      "imageUrls": ["https://..."],
-      "inventory": 12
-    }
-  ],
-  "success": true
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Urban Runner Pro Sneakers",
+  "description": "High-performance running sneakers...",
+  "price": 89.99,
+  "category": "Footwear",
+  "images": ["https://picsum.photos/seed/sneaker1/400/400"],
+  "inventory": 25,
+  "rating": 4.8,
+  "tags": ["bestseller"],
+  "isFeatured": true
 }
-```
-
----
-
-**GET /products/{id}**
-Returns a single product by ID.
-
-Response `200`: single product object (same shape as above).
-Response `404`: product not found error.
-
----
-
-**GET /products/categories**
-Returns the distinct list of categories.
-
-Response `200`:
-```json
-{ "data": ["Footwear", "Apparel", "Accessories"], "success": true }
 ```
 
 ---
 
 #### Cart
 
-Cart is managed client-side (Zustand + localStorage). The backend exposes a cart-validation endpoint used before checkout.
+Cart is fully server-side. All endpoints require `X-Session-ID`. A cart is auto-created on first request.
 
-**POST /cart/validate**
-Validates that requested quantities are available before the checkout form is submitted.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/cart` | Current cart with computed totals |
+| POST | `/v1/cart/items` | Add item — body: `{ productId, quantity }` |
+| PATCH | `/v1/cart/items/{productId}` | Set quantity — body: `{ quantity }` |
+| DELETE | `/v1/cart/items/{productId}` | Remove item |
+| DELETE | `/v1/cart` | Clear all items |
 
-Request body:
+All cart mutation responses return the updated `CartResponse`. `POST /v1/cart/items` returns `400 INSUFFICIENT_INVENTORY` if the requested quantity exceeds stock.
+
 ```json
+// CartResponse shape
 {
+  "id": "cart-uuid",
   "items": [
-    { "productId": 1, "quantity": 2 },
-    { "productId": 5, "quantity": 1 }
-  ]
-}
-```
-
-Response `200` (all valid):
-```json
-{ "data": { "valid": true }, "success": true }
-```
-
-Response `200` (inventory issue):
-```json
-{
-  "data": {
-    "valid": false,
-    "conflicts": [
-      { "productId": 1, "requested": 2, "available": 1, "name": "Blue Sneakers" }
-    ]
-  },
-  "success": true
+    {
+      "productId": "product-uuid",
+      "product": { /* full ProductResponse */ },
+      "quantity": 2
+    }
+  ],
+  "subtotal": 179.98,
+  "taxes": 14.40,
+  "shipping": 0.00,
+  "total": 194.38
 }
 ```
 
@@ -367,224 +415,193 @@ Response `200` (inventory issue):
 
 #### Orders
 
-**POST /orders**
-Places an order. Backend re-validates inventory, decrements stock, and persists the order.
+**POST /v1/orders** — place order (requires `X-Session-ID`)
 
-Request body:
+Backend flow: fetch cart → re-validate inventory inside `@Transactional` → decrement stock → persist order → clear cart → return 201.
+
 ```json
+// Request body
 {
-  "contact": {
-    "email": "shopper@example.com",
-    "phone": "555-0100"
-  },
   "shipping": {
     "firstName": "Jane",
     "lastName": "Doe",
-    "addressLine1": "123 Main St",
-    "addressLine2": "",
+    "email": "jane@example.com",
+    "phone": "555-0100",
+    "address": "123 Main St",
     "city": "Springfield",
     "state": "IL",
-    "zipCode": "62701",
+    "zip": "62701",
     "country": "US"
   },
-  "items": [
-    { "productId": 1, "quantity": 2 }
-  ]
+  "payment": {
+    "cardNumber": "4111111111111111",
+    "cardExpiry": "12/27",
+    "cardCvc": "123"
+  }
 }
 ```
 
-Response `201`:
+Required shipping fields: `firstName`, `lastName`, `email`, `address`, `city`, `state`, `zip`, `country`. `phone` is required by the Zod frontend schema but is optional on the backend (`@NotBlank` is not set).
+
+Payment fields are accepted as-is — no real processing occurs.
+
 ```json
+// OrderResponse (201)
 {
-  "data": {
-    "orderId": "ORD-2024-00042",
-    "placedAt": "2024-11-01T14:32:00Z",
-    "items": [
-      { "productId": 1, "name": "Blue Sneakers", "quantity": 2, "unitPrice": 59.99, "lineTotal": 119.98 }
-    ],
-    "subtotal": 119.98,
-    "tax": 12.00,
-    "shipping": 0.00,
-    "total": 131.98
-  },
-  "success": true
+  "id": "order-uuid",
+  "orderNumber": "BM-2026-00001",
+  "status": "processing",
+  "items": [
+    {
+      "productId": "product-uuid",
+      "productName": "Urban Runner Pro Sneakers",
+      "productImage": "https://picsum.photos/seed/sneaker1/400/400",
+      "price": 89.99,
+      "quantity": 2
+    }
+  ],
+  "subtotal": 179.98,
+  "taxes": 14.40,
+  "shipping": 0.00,
+  "total": 194.38,
+  "customerName": "Jane Doe",
+  "email": "jane@example.com",
+  "estimatedDelivery": "2026-05-05",
+  "createdAt": "2026-04-28T14:32:00Z"
 }
 ```
 
-Response `409` (inventory conflict): standard error envelope with code `INSUFFICIENT_INVENTORY`.
-Response `400` (validation failure): standard error envelope with code `VALIDATION_ERROR`.
+Response `409 INSUFFICIENT_INVENTORY`: stock depleted between cart and checkout.
+Response `400 BAD_REQUEST`: cart is empty.
+Response `400 VALIDATION_ERROR`: missing required fields.
 
----
+**GET /v1/orders/{id}** — retrieve order by UUID (used by confirmation page)
 
-**GET /orders/{orderId}**
-Returns a previously placed order. Used by the confirmation page.
-
-Response `200`: order object (same shape as POST /orders response).
-Response `404`: order not found.
+Response `200`: `OrderResponse`; `404`: `ORDER_NOT_FOUND`
 
 ---
 
 ### 8.5 Error Codes
 
-| Code | HTTP Status | Description |
+| Code | HTTP Status | Trigger |
 |---|---|---|
-| `PRODUCT_NOT_FOUND` | 404 | Requested product ID does not exist |
-| `ORDER_NOT_FOUND` | 404 | Requested order ID does not exist |
-| `INSUFFICIENT_INVENTORY` | 409 | One or more items lack sufficient stock |
-| `VALIDATION_ERROR` | 400 | Request body fails bean validation |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
+| `PRODUCT_NOT_FOUND` | 404 | Product UUID does not exist |
+| `CART_ITEM_NOT_FOUND` | 404 | Item not in cart on update/remove |
+| `ORDER_NOT_FOUND` | 404 | Order UUID does not exist |
+| `INSUFFICIENT_INVENTORY` | 400 | Cart add/update exceeds available stock |
+| `INSUFFICIENT_INVENTORY` | 409 | Order placement — stock depleted between cart and checkout |
+| `VALIDATION_ERROR` | 400 | Bean Validation failure on request body |
+| `BAD_REQUEST` | 400 | e.g. placing order with empty cart |
+| `INTERNAL_ERROR` | 500 | Unhandled exception (detail not exposed to client) |
 
 ### 8.6 Service Layer Structure
 
 ```
 ProductService
-  - findAll(category, query)
-  - findById(id)
-  - findCategories()
+  - getProducts(page, limit, category, search, isFeatured, sort) → ProductListResponse
+  - getProductById(UUID id) → ProductResponse
+  - getRelatedProducts(UUID id) → List<ProductResponse>
+  - getCategories() → CategoryResponse
 
 CartService
-  - validateCart(List<CartItemRequest>)
+  - getCart(sessionId) → CartResponse         // auto-creates cart
+  - addItem(sessionId, productId, qty)        // 400 if qty > inventory
+  - updateItem(sessionId, productId, qty)     // 400 if qty > inventory
+  - removeItem(sessionId, productId)
+  - clearCart(sessionId)
+  - toResponse(Cart) → CartResponse           // computes subtotal/taxes/shipping
 
 OrderService
-  - placeOrder(OrderRequest)  // validates inventory, decrements stock, persists order
-  - findById(orderId)
+  - placeOrder(sessionId, OrderRequest) → OrderResponse  // @Transactional
+  - getOrder(UUID id) → OrderResponse
+  - generateOrderNumber() → "BM-{YEAR}-{5-digit-seq}"
+  - calculateEstimatedDelivery(orderDate) → LocalDate    // +3–5 business days
 ```
 
 ### 8.7 Environment Variables (Backend)
 
+Default `be/src/main/resources/application.properties` uses H2 — no changes needed for demo:
+
 ```properties
-# src/main/resources/application.properties
-spring.datasource.url=jdbc:mysql://localhost:3306/ecommerce_db
-spring.datasource.username=root
-spring.datasource.password=secret
-spring.jpa.hibernate.ddl-auto=validate
 server.port=8080
+
+# H2 in-memory (default — no external DB required)
+spring.datasource.url=jdbc:h2:mem:buymore;DB_CLOSE_DELAY=-1;NON_KEYWORDS=ORDER
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+```
+
+To switch to PostgreSQL, override these four properties (env vars or a local properties file):
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/buymore
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.datasource.username=<user>
+spring.datasource.password=<pass>
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.hibernate.ddl-auto=update
 ```
 
 ---
 
 ## 9. Database Design Specification
 
-### 9.1 Schema
+The schema is managed entirely through JPA entity annotations. `ddl-auto=create-drop` on H2 means the schema is created fresh on every startup — no SQL migration files are needed for the demo.
 
-#### `categories`
-```sql
-CREATE TABLE categories (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name       VARCHAR(100) NOT NULL UNIQUE,
-  slug       VARCHAR(100) NOT NULL UNIQUE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+### 9.1 Entity Summary
 
-#### `products`
-```sql
-CREATE TABLE products (
-  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  category_id INT UNSIGNED NOT NULL,
-  name        VARCHAR(255) NOT NULL,
-  description TEXT,
-  price       DECIMAL(10, 2) NOT NULL,
-  inventory   INT UNSIGNED NOT NULL DEFAULT 0,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES categories(id)
-);
-```
+| Table | Entity class | Notes |
+|---|---|---|
+| `products` | `Product` | UUID PK; `images` and `tags` stored as JSON strings via `StringListConverter` to avoid DB-specific array types |
+| `carts` | `Cart` | UUID PK; `session_id VARCHAR UNIQUE` ties to the browser session |
+| `cart_items` | `CartItem` | UUID PK; FK → `carts` + FK → `products`; unique `(cart_id, product_id)` |
+| `orders` | `CustomerOrder` | Named `CustomerOrder` to avoid clash with SQL reserved word `ORDER`; UUID PK |
+| `order_items` | `OrderItem` | Snapshot of `product_name`, `product_image`, `price` at order time |
+| `shipping_addresses` | `ShippingAddress` | One-to-one with `orders` |
 
-#### `product_images`
-```sql
-CREATE TABLE product_images (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  product_id INT UNSIGNED NOT NULL,
-  url        VARCHAR(500) NOT NULL,
-  sort_order INT UNSIGNED NOT NULL DEFAULT 0,
-  CONSTRAINT fk_image_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-);
-```
+### 9.2 Key Column Details
 
-#### `orders`
-```sql
-CREATE TABLE orders (
-  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  order_number    VARCHAR(30) NOT NULL UNIQUE,   -- e.g. ORD-2024-00042
-  email           VARCHAR(255) NOT NULL,
-  phone           VARCHAR(50),
-  shipping_name   VARCHAR(255) NOT NULL,
-  address_line1   VARCHAR(255) NOT NULL,
-  address_line2   VARCHAR(255),
-  city            VARCHAR(100) NOT NULL,
-  state           VARCHAR(100) NOT NULL,
-  zip_code        VARCHAR(20) NOT NULL,
-  country         CHAR(2) NOT NULL DEFAULT 'US',
-  subtotal        DECIMAL(10, 2) NOT NULL,
-  tax             DECIMAL(10, 2) NOT NULL,
-  shipping        DECIMAL(10, 2) NOT NULL,
-  total           DECIMAL(10, 2) NOT NULL,
-  placed_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+**`products`**
 
-#### `order_items`
-```sql
-CREATE TABLE order_items (
-  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  order_id    INT UNSIGNED NOT NULL,
-  product_id  INT UNSIGNED NOT NULL,
-  name        VARCHAR(255) NOT NULL,   -- snapshot at time of order
-  unit_price  DECIMAL(10, 2) NOT NULL,
-  quantity    INT UNSIGNED NOT NULL,
-  line_total  DECIMAL(10, 2) NOT NULL,
-  CONSTRAINT fk_item_order   FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
-  CONSTRAINT fk_item_product FOREIGN KEY (product_id) REFERENCES products(id)
-);
-```
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | Auto-generated |
+| `name` | VARCHAR(255) | |
+| `description` | TEXT | |
+| `price` | DECIMAL(10,2) | |
+| `category` | VARCHAR(100) | `Footwear`, `Clothing`, `Accessories`, `Bags` |
+| `images` | TEXT | JSON array via `StringListConverter`, e.g. `["url1","url2"]` |
+| `inventory` | INT | Default 0; decremented on order |
+| `rating` | DECIMAL(2,1) | Nullable, 1.0–5.0 |
+| `tags` | TEXT | JSON array via `StringListConverter`, nullable |
+| `is_featured` | BOOLEAN | Default false |
+| `created_at` / `updated_at` | TIMESTAMPTZ | |
 
-### 9.2 Indexes
-```sql
-CREATE INDEX idx_products_category ON products(category_id);
-CREATE INDEX idx_products_name     ON products(name);
-CREATE INDEX idx_order_items_order ON order_items(order_id);
-```
+**`orders`**
+
+| Column | Type | Notes |
+|---|---|---|
+| `order_number` | VARCHAR(20) UNIQUE | Format: `BM-YYYY-00042` |
+| `status` | VARCHAR(50) | `processing` on creation |
+| `subtotal` / `taxes` / `shipping` / `total` | DECIMAL(10,2) | |
+| `estimated_delivery` | DATE | 3–5 business days after order date |
 
 ### 9.3 Seed Data
 
-```sql
--- Categories
-INSERT INTO categories (name, slug) VALUES
-  ('Footwear',    'footwear'),
-  ('Apparel',     'apparel'),
-  ('Accessories', 'accessories'),
-  ('Electronics', 'electronics'),
-  ('Home & Living', 'home-living');
+`DataSeeder.java` seeds **16 products** across 4 categories on first startup (skips if any products exist):
 
--- Products (sample — expand to ~20 for demo)
-INSERT INTO products (category_id, name, description, price, inventory) VALUES
-  (1, 'Blue Running Sneakers',  'Lightweight trail runners with responsive cushioning.', 59.99, 12),
-  (1, 'Classic White Canvas',   'Everyday low-top canvas shoes for any occasion.',       39.99,  3),  -- low stock
-  (1, 'Black Formal Oxfords',   'Polished leather oxfords for the office.',               89.99,  0),  -- out of stock
-  (2, 'Grey Crewneck Sweatshirt','Heavyweight fleece, relaxed fit.',                      44.99, 20),
-  (2, 'Slim Fit Chinos',        'Stretch cotton chinos in khaki.',                        54.99,  8),
-  (3, 'Leather Bifold Wallet',  'Full-grain leather, 6-card slots.',                      29.99, 15),
-  (3, 'Canvas Tote Bag',        'Sturdy cotton tote with internal pocket.',               19.99,  4),  -- low stock
-  (4, 'Wireless Earbuds',       'True wireless, 24-hour battery life.',                   79.99, 10),
-  (4, 'USB-C Hub 7-in-1',       'HDMI, USB-A, SD card reader, and more.',                49.99,  6),
-  (5, 'Ceramic Pour-Over Set',  'Minimalist dripper with matching carafe.',               34.99,  9);
+| Category | Count | Stock variety |
+|---|---|---|
+| Footwear | 5 | 1 out-of-stock (`inventory=0`), 1 low-stock (`inventory=3`) |
+| Clothing | 5 | 1 low-stock (`inventory=2`), rest 15–50 |
+| Accessories | 3 | 1 low-stock (`inventory=1`) |
+| Bags | 3 | 1 out-of-stock (`inventory=0`) |
 
--- Product images (using placeholder URLs for demo)
-INSERT INTO product_images (product_id, url, sort_order) VALUES
-  (1, 'https://placehold.co/600x600?text=Blue+Sneakers',    0),
-  (1, 'https://placehold.co/600x600?text=Blue+Sneakers+2',  1),
-  (2, 'https://placehold.co/600x600?text=White+Canvas',     0),
-  (3, 'https://placehold.co/600x600?text=Black+Oxfords',    0),
-  (4, 'https://placehold.co/600x600?text=Sweatshirt',       0),
-  (5, 'https://placehold.co/600x600?text=Chinos',           0),
-  (6, 'https://placehold.co/600x600?text=Wallet',           0),
-  (7, 'https://placehold.co/600x600?text=Tote+Bag',         0),
-  (8, 'https://placehold.co/600x600?text=Earbuds',          0),
-  (9, 'https://placehold.co/600x600?text=USB+Hub',          0),
-  (10,'https://placehold.co/600x600?text=Pour+Over',        0);
-```
+All product images use `https://picsum.photos/seed/{slug}/400/400` URLs. See §17 for a known issue with the `next.config.ts` image domain allowlist.
 
 ---
 
@@ -593,14 +610,19 @@ INSERT INTO product_images (product_id, url, sort_order) VALUES
 | Rule | Location | Detail |
 |---|---|---|
 | Quantity minimum | Frontend + Backend | `quantity >= 1` always |
-| Quantity maximum (add to cart) | Frontend | `quantity <= product.inventory` |
-| Inventory check on order | Backend | Re-validate each item at `POST /orders` time; reject with `409` if any item has insufficient stock |
-| Inventory decrement | Backend | Decrement `products.inventory` atomically within a DB transaction after order validation succeeds |
-| Price calculation | Backend | Subtotal = sum of `(unit_price × quantity)` per line; tax = `subtotal × 0.10`; shipping = `subtotal > 75 ? 0 : 4.99` |
-| Card number format | Frontend only | 16-digit numeric, displayed with spaces; never sent to backend |
-| Expiry date | Frontend only | Must be a future month/year; never sent to backend |
-| Required checkout fields | Frontend + Backend | First name, last name, address line 1, city, state, zip, country, email |
-| Order number format | Backend | `ORD-{YYYY}-{5-digit-zero-padded-sequence}`, generated server-side |
+| Quantity maximum (add to cart) | Frontend + Backend | Frontend caps at `product.inventory`; backend enforces via `400 INSUFFICIENT_INVENTORY` |
+| Inventory check on add to cart | Backend | `CartService.addItem/updateItem` rejects if `newQty > product.inventory` (HTTP 400) |
+| Inventory check on order | Backend | `OrderService.placeOrder` re-validates all items inside `@Transactional`; rejects with `409` if any item has insufficient stock |
+| Inventory decrement | Backend | `product.inventory -= quantity` per item, saved atomically in the same transaction as the order |
+| Tax rate | Backend | `taxes = subtotal × 0.08` (8%), rounded to 2 decimal places |
+| Shipping | Backend | `shipping = subtotal >= 100.00 ? $0.00 : $9.99` |
+| Total | Backend | `total = subtotal + taxes + shipping` |
+| Card fields | Frontend only | `cardNumber` (16 digits), `cardExpiry` (MM/YY regex), `cardCvc` (3–4 digits) — validated by Zod, sent to backend as-is, no processing |
+| Required checkout fields | Frontend (Zod) + Backend (Bean Validation) | `firstName`, `lastName`, `email`, `address`, `city`, `state`, `zip`, `country`; `phone` required by frontend Zod schema, optional on backend |
+| Order number format | Backend | `BM-{YYYY}-{5-digit-zero-padded-sequence}` — sequence counts orders placed in the current calendar year |
+| Estimated delivery | Backend | Order date + 3–5 business days (random within range, weekends skipped) |
+| Low stock badge | Frontend | `inventory <= 5 && inventory > 0` (constant `LOW_STOCK_THRESHOLD = 5` in `utils/inventory.ts`) |
+| Out of stock | Frontend + Backend | `inventory <= 0`; frontend disables Add to Cart; backend refuses cart add |
 
 ---
 
@@ -614,72 +636,108 @@ INSERT INTO product_images (product_id, url, sort_order) VALUES
 - **Empty search results**: Show an inline "No products found" state within the grid area, not a full-page error.
 
 ### Backend
-- All exceptions mapped to the standard error envelope via a `@RestControllerAdvice` global exception handler.
-- `EntityNotFoundException` → `404 PRODUCT_NOT_FOUND` or `ORDER_NOT_FOUND`.
-- `InsufficientInventoryException` → `409 INSUFFICIENT_INVENTORY` with per-item conflict details.
-- `MethodArgumentNotValidException` → `400 VALIDATION_ERROR` with per-field messages.
-- All other `Exception` → `500 INTERNAL_ERROR` (stack trace logged, not exposed to client).
+All exceptions are handled by `GlobalExceptionHandler` (`@RestControllerAdvice`). Every error response has the shape `{ "error": "...", "code": "..." }`.
+
+| Exception | HTTP | Code |
+|---|---|---|
+| `ResourceNotFoundException` | 404 | Code carried by the exception (`PRODUCT_NOT_FOUND`, `CART_ITEM_NOT_FOUND`, `ORDER_NOT_FOUND`) |
+| `InsufficientInventoryException` | 400 (cart) / 409 (order) | `INSUFFICIENT_INVENTORY` — HTTP status is set on the exception at throw site |
+| `MethodArgumentNotValidException` | 400 | `VALIDATION_ERROR` — field error messages joined by `"; "` |
+| `IllegalArgumentException` | 400 | `BAD_REQUEST` — used for empty-cart checkout |
+| Any other `Exception` | 500 | `INTERNAL_ERROR` — details logged server-side only |
 
 ---
 
 ## 12. Build and Deployment Notes
 
 ### Prerequisites
-| Tool | Version |
-|---|---|
-| Node.js | 20+ |
-| Java JDK | 17+ |
-| Maven | 3.9+ |
-| MySQL | 8.0+ |
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 18+ | |
+| pnpm | 9+ | `npm i -g pnpm` if not installed |
+| Java JDK | 17+ | |
+| Maven | 3.6+ | |
 
-### Step 1 — Database Setup
+No external database required — H2 runs in-memory by default.
+
+### Option A — Mock mode (frontend only, no backend needed)
+
 ```bash
-mysql -u root -p -e "CREATE DATABASE ecommerce_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -p ecommerce_db < database/schema.sql
-mysql -u root -p ecommerce_db < database/seed.sql
+cd fe/e-commerce
+pnpm install
+pnpm dev
+# App at http://localhost:3000 — built-in mock layer, 13 seed products
 ```
 
-### Step 2 — Backend
+### Option B — Full stack (two terminals)
+
+**Terminal 1 — Backend**
 ```bash
-cd backend
-cp src/main/resources/application.properties.example src/main/resources/application.properties
-# Edit application.properties with your DB credentials
+cd be
 mvn spring-boot:run
-# API available at http://localhost:8080
+# API at http://localhost:8080/v1
+# H2 console at http://localhost:8080/h2-console  (JDBC: jdbc:h2:mem:buymore, user: sa, password: blank)
 ```
 
-### Step 3 — Frontend
+**Terminal 2 — Frontend**
 ```bash
-cd frontend
-cp .env.example .env.local
-# .env.local: NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api
-npm install
-npm run dev
-# App available at http://localhost:3000
+cd fe/e-commerce
+cp .env.example .env.local        # then set NEXT_PUBLIC_API_URL=http://localhost:8080/v1
+pnpm install
+pnpm dev
+# App at http://localhost:3000
 ```
+
+### Option C — Docker Compose (all-in-one, no local Java or Node required)
+
+```bash
+docker compose up --build
+```
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8080/v1 |
+| H2 Console | http://localhost:8080/h2-console |
+
+```bash
+docker compose down   # stop and remove containers
+```
+
+Data resets on container restart (H2 in-memory, same as local dev).
 
 ### Environment Variable Reference
 
-**`frontend/.env.example`**
+**`fe/e-commerce/.env.local`** (copy from `.env.example`)
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api
+# Connect to real backend (leave unset to use mock layer)
+NEXT_PUBLIC_API_URL=http://localhost:8080/v1
+
+# Force mock mode even when API_URL is set (optional)
+# NEXT_PUBLIC_USE_MOCKS=true
 ```
 
-**`backend/src/main/resources/application.properties.example`**
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/ecommerce_db
-spring.datasource.username=YOUR_DB_USER
-spring.datasource.password=YOUR_DB_PASSWORD
-spring.jpa.hibernate.ddl-auto=validate
-spring.jpa.show-sql=false
-server.port=8080
+### Other useful commands
+
+```bash
+# Frontend
+pnpm build    # production build (outputs standalone bundle)
+pnpm start    # serve the production build
+pnpm lint     # ESLint
+
+# Backend
+mvn package -DskipTests          # build runnable JAR
+java -jar target/buymore-api-0.0.1-SNAPSHOT.jar
+mvn test                         # run backend tests
 ```
 
 ---
 
 ## 13. Test Plan
 
-### 13.1 Frontend Tests (Jest + React Testing Library)
+> **Current status:** No test infrastructure is configured and no test files exist yet. The cases below are the target test plan. When tests are added, the recommended frontend stack is **Vitest + React Testing Library**; run with `pnpm test`. Backend uses Spring Boot Test (`mvn test`).
+
+### 13.1 Frontend Tests (Vitest + React Testing Library — planned)
 
 | ID | Area | Test Case | Expected Result |
 |---|---|---|---|
@@ -695,15 +753,15 @@ server.port=8080
 | FE-10 | Cart | Displays all added items with correct totals | Line totals and order summary correct |
 | FE-11 | Cart | Remove item with undo — undo within 3 s restores item | Item reappears |
 | FE-12 | Cart | Remove item — undo expires — item gone | Item absent after 3 s |
-| FE-13 | Cart | Free shipping threshold: subtotal > $75 shows $0 shipping | Shipping line shows "$0.00" |
+| FE-13 | Cart | Free shipping threshold: subtotal >= $100 shows $0 shipping | Shipping line shows "Free" |
 | FE-14 | Cart | Empty cart state shown when all items removed | Empty state component rendered |
 | FE-15 | Checkout | Required field validation on submit | Errors shown on blank required fields |
 | FE-16 | Checkout | Invalid card number format rejected | Inline error on card number field |
 | FE-17 | Checkout | Past expiry date rejected | Inline error on expiry field |
-| FE-18 | Order Confirmation | Estimated delivery date is 5 business days from today | Correct date displayed |
-| FE-19 | Cart State | Cart persists after page refresh (localStorage) | Items still in cart on reload |
+| FE-18 | Order Confirmation | Estimated delivery date rendered from backend-computed `estimatedDelivery` field | Correct date displayed in human-readable format |
+| FE-19 | Cart State | Cart re-fetched after page refresh using same `X-Session-ID` from localStorage | Items still in cart on reload |
 
-### 13.2 Backend Tests (JUnit 5 + Mockito + Spring Boot Test)
+### 13.2 Backend Tests (Spring Boot Test — planned, no tests written yet)
 
 | ID | Area | Test Case | Expected Result |
 |---|---|---|---|
@@ -713,17 +771,20 @@ server.port=8080
 | BE-04 | Product API | GET /products/{id} returns correct product | 200 with product data |
 | BE-05 | Product API | GET /products/{id} for non-existent ID | 404 PRODUCT_NOT_FOUND |
 | BE-06 | Product API | GET /products/categories returns category list | 200 with distinct category names |
-| BE-07 | Cart Validate | POST /cart/validate with valid quantities | 200 `valid: true` |
-| BE-08 | Cart Validate | POST /cart/validate with over-stock quantity | 200 `valid: false` with conflict details |
-| BE-09 | Order | POST /orders with valid data and sufficient stock | 201 with order ID, inventory decremented |
-| BE-10 | Order | POST /orders with insufficient stock | 409 INSUFFICIENT_INVENTORY |
-| BE-11 | Order | POST /orders with missing required field | 400 VALIDATION_ERROR |
-| BE-12 | Order | GET /orders/{orderId} returns correct order | 200 with order data |
-| BE-13 | Order | GET /orders/{orderId} for non-existent ID | 404 ORDER_NOT_FOUND |
-| BE-14 | Order Service | Inventory decrement is atomic within transaction | Concurrent test: no oversell |
-| BE-15 | Price Calc | Subtotal > $75 computes $0 shipping | Shipping = 0 in response |
-| BE-16 | Price Calc | Subtotal ≤ $75 computes $4.99 shipping | Shipping = 4.99 in response |
-| BE-17 | Price Calc | Tax calculated as 10% of subtotal | Tax = subtotal × 0.10 |
+| BE-07 | Cart | POST /v1/cart/items adds item when quantity <= inventory | 200 CartResponse, item present |
+| BE-08 | Cart | POST /v1/cart/items with quantity > inventory | 400 INSUFFICIENT_INVENTORY |
+| BE-09 | Cart | PATCH /v1/cart/items/{id} updates quantity | 200 CartResponse with new quantity |
+| BE-10 | Cart | DELETE /v1/cart/items/{id} removes item | 200 CartResponse without item |
+| BE-11 | Cart | DELETE /v1/cart clears all items | 200 `{ message: "Cart cleared" }` |
+| BE-12 | Order | POST /v1/orders with valid data and sufficient stock | 201, inventory decremented, cart cleared |
+| BE-13 | Order | POST /v1/orders with insufficient stock | 409 INSUFFICIENT_INVENTORY |
+| BE-14 | Order | POST /v1/orders with empty cart | 400 BAD_REQUEST |
+| BE-15 | Order | POST /v1/orders with missing required field | 400 VALIDATION_ERROR |
+| BE-16 | Order | GET /v1/orders/{id} returns correct order | 200 with order data |
+| BE-17 | Order | GET /v1/orders/{id} for non-existent ID | 404 ORDER_NOT_FOUND |
+| BE-18 | Price Calc | Subtotal >= $100 computes $0 shipping | Shipping = 0 in response |
+| BE-19 | Price Calc | Subtotal < $100 computes $9.99 shipping | Shipping = 9.99 in response |
+| BE-20 | Price Calc | Tax calculated as 8% of subtotal | Tax = subtotal × 0.08 |
 
 ### 13.3 Integration / End-to-End (Playwright — stretch goal)
 
@@ -736,109 +797,116 @@ server.port=8080
 
 ---
 
-## 14. Suggested Folder Structure
+## 14. Actual Folder Structure
 
 ```
-ai-hackathon-arrive/
-├── frontend/
+ai-hackaton-arrive/
+├── fe/e-commerce/                          # Next.js frontend
 │   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx                        # → ProductListingPage
-│   │   ├── products/
-│   │   │   └── [id]/
-│   │   │       └── page.tsx                # → ProductDetailPage
-│   │   ├── cart/
-│   │   │   └── page.tsx                    # → CartPage
-│   │   ├── checkout/
-│   │   │   └── page.tsx                    # → CheckoutPage
-│   │   └── order-confirmation/
-│   │       └── [orderId]/
-│   │           └── page.tsx                # → OrderConfirmationPage
+│   │   ├── layout.tsx                      # Root layout (Header, QueryProvider, Toaster)
+│   │   ├── page.tsx                        # Product listing (/, sidebar + grid)
+│   │   ├── products/[productId]/page.tsx   # Product detail
+│   │   ├── cart/page.tsx                   # Cart
+│   │   ├── checkout/page.tsx               # Checkout form
+│   │   └── order-confirmation/page.tsx     # Confirmation (?orderId=UUID)
 │   ├── components/
-│   │   ├── ui/                             # shadcn/ui generated components
+│   │   ├── ui/                             # shadcn/ui primitives
 │   │   ├── layout/
-│   │   │   └── Header.tsx
+│   │   │   ├── Header.tsx                  # Search bar, cart badge
+│   │   │   └── Sidebar.tsx                 # Category navigation (collapsible mobile)
 │   │   ├── products/
 │   │   │   ├── ProductCard.tsx
-│   │   │   ├── ProductGrid.tsx
-│   │   │   ├── CategoryFilter.tsx
-│   │   │   ├── SearchInput.tsx
+│   │   │   ├── ProductGrid.tsx             # Skeleton states, error, empty states
+│   │   │   ├── ProductFilters.tsx          # Sort dropdown + category pills + search input
 │   │   │   └── HeroBanner.tsx
 │   │   ├── cart/
 │   │   │   ├── CartItem.tsx
-│   │   │   └── CartSummary.tsx
+│   │   │   ├── CartSummary.tsx
+│   │   │   └── EmptyCart.tsx
 │   │   ├── checkout/
-│   │   │   ├── ShippingForm.tsx
-│   │   │   ├── ContactForm.tsx
-│   │   │   └── PaymentForm.tsx
-│   │   └── shared/
-│   │       ├── StockBadge.tsx
-│   │       ├── QuantitySelector.tsx
-│   │       ├── EmptyState.tsx
-│   │       └── LoadingSpinner.tsx
-│   ├── hooks/
-│   │   ├── useProducts.ts
-│   │   └── useOrder.ts
+│   │   │   └── OrderSummary.tsx            # Sticky sidebar on checkout page
+│   │   └── providers/
+│   │       └── QueryProvider.tsx           # TanStack Query client setup
 │   ├── lib/
-│   │   ├── api.ts                          # fetch wrapper
-│   │   └── utils.ts
-│   ├── store/
-│   │   └── cartStore.ts                    # Zustand cart store
-│   ├── types/
-│   │   └── index.ts                        # shared TypeScript types
-│   ├── .env.example
-│   ├── next.config.ts
-│   ├── tailwind.config.ts
-│   └── package.json
+│   │   ├── api/
+│   │   │   ├── api-client.ts               # Central fetch wrapper; mock vs real routing
+│   │   │   ├── products-service.ts
+│   │   │   ├── cart-service.ts             # Attaches X-Session-ID header
+│   │   │   ├── orders-service.ts
+│   │   │   └── mock/
+│   │   │       ├── mock-data.ts            # 13 seed products (frontend mock only)
+│   │   │       ├── mock-products.ts
+│   │   │       ├── mock-cart.ts
+│   │   │       └── mock-orders.ts
+│   │   ├── hooks/
+│   │   │   ├── use-products.ts
+│   │   │   ├── use-product.ts
+│   │   │   ├── use-cart.ts
+│   │   │   └── use-checkout.ts             # Also exports useOrder
+│   │   ├── types/
+│   │   │   ├── product.ts
+│   │   │   ├── cart.ts
+│   │   │   └── order.ts                    # Includes checkoutFormSchema (Zod)
+│   │   ├── utils/
+│   │   │   ├── currency.ts                 # formatPrice()
+│   │   │   ├── inventory.ts                # LOW_STOCK_THRESHOLD, getInventoryStatus, canAddToCart
+│   │   │   └── session.ts                  # getSessionId() → localStorage UUID
+│   │   └── constants/
+│   │       └── query-keys.ts               # TanStack Query key factory
+│   ├── next.config.ts                      # output: standalone; image domains: unsplash.com, picsum.photos
+│   ├── package.json                        # pnpm; Next 16, React 19, TanStack Query v5
+│   └── pnpm-workspace.yaml
 │
-├── backend/
-│   └── src/
-│       ├── main/
-│       │   ├── java/com/hackathon/ecommerce/
-│       │   │   ├── EcommerceApplication.java
-│       │   │   ├── config/
-│       │   │   │   └── CorsConfig.java
-│       │   │   ├── controller/
-│       │   │   │   ├── ProductController.java
-│       │   │   │   ├── CartController.java
-│       │   │   │   └── OrderController.java
-│       │   │   ├── service/
-│       │   │   │   ├── ProductService.java
-│       │   │   │   ├── CartService.java
-│       │   │   │   └── OrderService.java
-│       │   │   ├── repository/
-│       │   │   │   ├── ProductRepository.java
-│       │   │   │   ├── CategoryRepository.java
-│       │   │   │   └── OrderRepository.java
-│       │   │   ├── model/
-│       │   │   │   ├── Product.java
-│       │   │   │   ├── Category.java
-│       │   │   │   ├── ProductImage.java
-│       │   │   │   ├── Order.java
-│       │   │   │   └── OrderItem.java
-│       │   │   ├── dto/
-│       │   │   │   ├── ProductDTO.java
-│       │   │   │   ├── OrderRequest.java
-│       │   │   │   ├── OrderResponse.java
-│       │   │   │   ├── CartValidateRequest.java
-│       │   │   │   └── CartValidateResponse.java
-│       │   │   └── exception/
-│       │   │       ├── GlobalExceptionHandler.java
-│       │   │       ├── InsufficientInventoryException.java
-│       │   │       └── EntityNotFoundException.java
-│       │   └── resources/
-│       │       ├── application.properties
-│       │       └── application.properties.example
-│       └── test/
-│           └── java/com/hackathon/ecommerce/
-│               ├── controller/
-│               └── service/
-│   └── pom.xml
+├── be/                                     # Spring Boot backend
+│   ├── pom.xml
+│   └── src/main/java/com/buymore/
+│       ├── BuyMoreApplication.java
+│       ├── DataSeeder.java                 # Seeds 16 products on first startup
+│       ├── config/CorsConfig.java
+│       ├── converter/StringListConverter.java  # List<String> ↔ JSON TEXT column
+│       ├── controller/
+│       │   ├── ProductController.java      # /v1/products
+│       │   ├── CartController.java         # /v1/cart
+│       │   └── OrderController.java        # /v1/orders
+│       ├── service/
+│       │   ├── ProductService.java
+│       │   ├── CartService.java
+│       │   └── OrderService.java
+│       ├── repository/
+│       │   ├── ProductRepository.java      # Custom JPQL: findWithFilters, findCategoryCounts
+│       │   ├── CartRepository.java
+│       │   ├── CartItemRepository.java
+│       │   ├── OrderRepository.java
+│       │   └── OrderItemRepository.java
+│       ├── entity/
+│       │   ├── Product.java
+│       │   ├── Cart.java
+│       │   ├── CartItem.java
+│       │   ├── CustomerOrder.java          # Named to avoid SQL keyword clash
+│       │   ├── OrderItem.java
+│       │   └── ShippingAddress.java
+│       ├── dto/
+│       │   ├── ProductResponse.java
+│       │   ├── ProductListResponse.java    # Includes Meta
+│       │   ├── CategoryResponse.java
+│       │   ├── CartResponse.java           # Includes CartItemResponse inner class
+│       │   ├── CartItemRequest.java
+│       │   ├── UpdateCartItemRequest.java
+│       │   ├── OrderRequest.java           # Includes ShippingInfo + PaymentInfo inner classes
+│       │   ├── OrderResponse.java          # Includes OrderItemResponse inner class
+│       │   └── ErrorResponse.java          # { "error": "...", "code": "..." }
+│       └── exception/
+│           ├── GlobalExceptionHandler.java
+│           ├── ResourceNotFoundException.java
+│           └── InsufficientInventoryException.java
 │
-├── database/
-│   ├── schema.sql
-│   └── seed.sql
+├── docs/
+│   ├── api-contract.md                     # Detailed API reference
+│   ├── task-split.md                       # Per-track deliverables
+│   └── mvp-scope.md                        # Prioritised checklist
 │
+├── docker-compose.yml                      # Full-stack container setup (FE + BE + H2)
+├── demo.md                                 # Demo overview and feature summary
 ├── SPEC.md
 └── README.md
 ```
@@ -855,25 +923,27 @@ The following represents the minimum shippable set to deliver a compelling live 
 - [ ] Cart page with quantity controls, remove, and order summary
 - [ ] Checkout page with form validation and loading state
 - [ ] Order confirmation page with order number and summary
-- [ ] `GET /products`, `GET /products/{id}`, `GET /products/categories`
-- [ ] `POST /cart/validate`
-- [ ] `POST /orders` with inventory check and decrement
-- [ ] `GET /orders/{orderId}`
-- [ ] MySQL schema + seed data (≥ 10 products across ≥ 3 categories)
-- [ ] CORS configured for localhost:3000
+- [ ] `GET /v1/products`, `GET /v1/products/{id}`, `GET /v1/products/categories`
+- [ ] `GET /v1/cart`, `POST /v1/cart/items`, `PATCH /v1/cart/items/{id}`, `DELETE /v1/cart/items/{id}`
+- [ ] `POST /v1/orders` with inventory re-validation and stock decrement
+- [ ] `GET /v1/orders/{id}`
+- [ ] H2 seeder runs on startup with ≥ 10 products across ≥ 3 categories (already implemented)
+- [ ] CORS configured for `localhost:3000` (already implemented)
+- [ ] `X-Session-ID` header handled by backend; session UUID generated and persisted by frontend
 
 ### Should Have (Demo Polish)
-- [ ] Hero banner on listing page
-- [ ] Related products section on detail page
-- [ ] Low Stock / Out of Stock badges
-- [ ] Toast notifications on cart actions
-- [ ] Free shipping threshold messaging
-- [ ] Responsive layout on mobile viewport
+- [x] Hero banner on listing page
+- [x] Related products section on detail page
+- [x] Low Stock / Out of Stock inventory badges
+- [x] Toast notifications on cart actions (Sonner, top-right)
+- [x] Free shipping threshold messaging in cart summary
+- [x] Responsive layout (mobile through 4-column desktop)
+- [x] Skeleton loaders on product grid and all async data
+- [x] Docker Compose single-command startup
 
 ### Nice to Have (If Time Permits)
 - [ ] Playwright E2E happy-path test
 - [ ] Animated cart drawer instead of separate cart page
-- [ ] Skeleton loading states on product grid
 - [ ] Smooth page transitions
 
 ### Out of Scope
@@ -900,9 +970,49 @@ The following represents the minimum shippable set to deliver a compelling live 
 | Wishlist | Persist a wishlist per user session or account |
 | Observability | Add structured logging (Logback + JSON), metrics (Micrometer + Prometheus), and distributed tracing |
 | CI/CD | Add GitHub Actions pipeline: lint → test → build → Docker image push |
-| Containerisation | Provide a `docker-compose.yml` to spin up frontend, backend, and MySQL together |
+| Containerisation | Extend `docker-compose.yml` to include a PostgreSQL service for production-like local testing |
 | Mobile App | React Native app sharing the same backend API |
 
 ---
 
-*Document version: 1.0 — prepared for AI Hackathon, April 2026.*
+---
+
+## 17. Known Issues and Integration Notes
+
+| # | Area | Issue | Resolution |
+|---|---|---|---|
+| ~~KI-01~~ | ~~Frontend images~~ | ~~`next.config.ts` did not allowlist `picsum.photos`~~ | **Resolved.** `picsum.photos` is now listed in `remotePatterns` alongside `images.unsplash.com` and `plus.unsplash.com`. |
+| KI-02 | Cart session | The frontend `session.ts` returns the string `"ssr-session"` when `window` is undefined (server-side render). Cart requests made during SSR will all share the same backend cart. | Cart mutations are client-only — `"use client"` pages prevent SSR cart calls in practice. No action required for demo. |
+| KI-03 | H2 data loss | All data (products, carts, orders) is lost when the backend process restarts because `ddl-auto=create-drop` drops and recreates the schema on every boot. | Expected for demo. Products are re-seeded automatically. Carts and orders are reset — inform demo audience. |
+| KI-04 | Concurrent inventory | `OrderService.placeOrder` uses `@Transactional` but does not use optimistic locking (`@Version`). Under concurrent load two users could both pass the inventory check and oversell. | Acceptable for hackathon demo. Add `@Version` to `Product` for production use. |
+| KI-05 | Phone field validation mismatch | Frontend Zod schema marks `phone` as required (`z.string().min(1)`). Backend `OrderRequest.ShippingInfo` does not annotate `phone` with `@NotBlank`, so it is optional server-side. | Intentional: frontend collects phone for UX, backend treats it as optional. No code change needed. |
+| KI-06 | Demo flow — mock vs real API | When switching from mock to real API (`NEXT_PUBLIC_API_URL` set), the session cart in the backend will be empty (new session). Users must re-add items. | Communicate to demo audience; restart backend and clear localStorage if a clean state is needed. |
+| KI-07 | UI placeholders | Wishlist (heart) button on product detail page and sidebar "Request for product" / "Log out" links have no handler — they are visual placeholders only. | Expected for hackathon MVP. Do not click during demo or warn the audience. |
+| KI-08 | Track order disabled | "Track order" button on the order confirmation page is permanently disabled with a "Coming soon" label. | Expected. No order tracking backend is planned for MVP. |
+| KI-09 | No frontend tests | Test infrastructure (Vitest, React Testing Library) has not been configured. No test files exist. | Planned addition. See §13 for the target test plan. |
+
+---
+
+## 18. Demo Script
+
+The recommended live demo sequence (golden path):
+
+1. Open `http://localhost:3000` — product grid loads with hero banner.
+2. Click a category filter pill — grid narrows to that category.
+3. Type in the search box — grid filters in real time.
+4. Point out **Low Stock** and **Out of Stock** badges.
+5. Click a product card → detail page.
+6. Adjust quantity, click **Add to Cart** — toast confirms; header badge increments.
+7. Navigate to **Cart** — item list and order summary visible.
+8. Adjust quantity up/down; show that the increment button disables at stock limit.
+9. Click **Proceed to Checkout**.
+10. Fill in the shipping form and the fake card fields (any values work).
+11. Click **Place Order** — loading spinner shows, then redirects to confirmation.
+12. Order confirmation shows order number (`BM-YYYY-00001`), items, and estimated delivery date.
+13. Click **Continue Shopping** — cart is empty, back to listing.
+
+---
+
+*Document version: 2.1 — synced with README.md, demo.md, and latest repo state, April 2026.*
+
+**v2.1 changes:** Added Docker Compose run option (§1, §12); fixed PD-04 quantity max formula; corrected OC-01 headline and OC-04 delivery date source; updated §7.1 component library; revised §7.3 component table to match actual files; added TanStack Query cache policy table and mock-layer notes to §7.4–7.5; corrected Tailwind v4 config convention in §7.7; fixed Node.js prerequisite to ≥ 18 (§12); added `.env.example` copy step and `pnpm start`/`mvn test` commands; flagged §13 as not-yet-implemented and updated stack to Vitest; fixed folder structure comments and added `docker-compose.yml`/`demo.md` to tree; marked all Should Have items as implemented in §15; removed Docker Compose from §16 future improvements; resolved KI-01 (picsum.photos now allowlisted); added KI-07–09 (UI placeholders, track order disabled, no frontend tests).*
