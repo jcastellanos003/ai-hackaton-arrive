@@ -1,8 +1,17 @@
 package com.buymore.exception;
 
+import org.springframework.http.HttpStatus;
+
 public class InsufficientInventoryException extends RuntimeException {
 
-    public InsufficientInventoryException(String message) {
+    private final HttpStatus httpStatus;
+
+    public InsufficientInventoryException(String message, HttpStatus httpStatus) {
         super(message);
+        this.httpStatus = httpStatus;
+    }
+
+    public HttpStatus getHttpStatus() {
+        return httpStatus;
     }
 }

@@ -418,6 +418,21 @@ The backend uses H2 in-memory by default inside the container (same as local dev
 
 ---
 
+### Running Both Together (quick copy-paste)
+
+```bash
+# Terminal 1 — Backend
+cd be && mvn spring-boot:run
+
+# Terminal 2 — Frontend
+cd fe/e-commerce
+echo "NEXT_PUBLIC_API_URL=http://localhost:8080/v1" > .env.local
+pnpm install
+pnpm dev
+```
+
+---
+
 ## Running Tests
 
 ### Frontend
