@@ -343,7 +343,7 @@ The app is available at **http://localhost:3000**.
 | Script | Command | Description |
 |---|---|---|
 | Dev server | `pnpm dev` | Hot-reload development server |
-| Production build | `pnpm build` | Compile and optimise for production |
+| Production build | `pnpm build` | Compile and optimise for production (outputs standalone bundle for Docker) |
 | Production server | `pnpm start` | Serve the production build |
 | Lint | `pnpm lint` | Run ESLint |
 
@@ -357,6 +357,13 @@ The app is available at **http://localhost:3000**.
 Both variables absent → mock mode. Either variable absent → mock mode.
 
 A ready-to-use template is provided at `fe/e-commerce/.env.example`.
+
+#### Allowed Remote Image Hosts
+
+`next.config.ts` whitelists the following hosts for `next/image`:
+- `images.unsplash.com`
+- `plus.unsplash.com`
+- `picsum.photos`
 
 ---
 
@@ -479,7 +486,7 @@ Spring Boot's test starter is included in the project. No custom tests have been
 ### Shopping Cart
 
 - **No login required** — cart is tied to an anonymous session UUID in `localStorage`.
-- **Inventory enforcement** — adding more than available stock returns a `409 Conflict` error: `"Only N items left in stock"`.
+- **Inventory enforcement** — adding more than available stock returns a `400 Bad Request` error: `"Only N items left in stock"`.
 - **Optimistic UI** — quantity updates and removals appear instantly and roll back on failure.
 - **Computed pricing**:
   - `taxes` = subtotal × 8%
@@ -651,7 +658,7 @@ Adds a product to the cart, or increments its quantity if already present.
 **Response `200 OK`:** Updated `CartResponse` (same shape as `GET /cart`).
 
 **Errors:**
-- `409` — `{ "error": "Only N items left in stock", "code": "INSUFFICIENT_INVENTORY" }` *(spec defines 400; the Spring Boot implementation returns 409)*
+- `400` — `{ "error": "Only N items left in stock", "code": "INSUFFICIENT_INVENTORY" }`
 
 ---
 
@@ -667,8 +674,8 @@ Updates the quantity of a specific cart item.
 **Response `200 OK`:** Updated `CartResponse`.
 
 **Errors:**
-- `404` — `{ "error": "Cart item not found", "code": "CART_ITEM_NOT_FOUND" }`
-- `409` — `{ "error": "Only N items left in stock", "code": "INSUFFICIENT_INVENTORY" }`
+- `400` — `{ "error": "Only N items left in stock", "code": "INSUFFICIENT_INVENTORY" }`
+- `404` — `{ "error": "Item not in cart", "code": "CART_ITEM_NOT_FOUND" }`
 
 ---
 
