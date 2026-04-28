@@ -6,6 +6,7 @@ import com.buymore.entity.Cart;
 import com.buymore.entity.CartItem;
 import com.buymore.entity.Product;
 import com.buymore.exception.InsufficientInventoryException;
+import org.springframework.http.HttpStatus;
 import com.buymore.exception.ResourceNotFoundException;
 import com.buymore.repository.CartItemRepository;
 import com.buymore.repository.CartRepository;
@@ -45,7 +46,8 @@ public class CartService {
 
         if (newQty > product.getInventory()) {
             throw new InsufficientInventoryException(
-                    "Only " + product.getInventory() + " items left in stock"
+                    "Only " + product.getInventory() + " items left in stock",
+                    HttpStatus.BAD_REQUEST
             );
         }
 
@@ -76,7 +78,8 @@ public class CartService {
 
         if (quantity > product.getInventory()) {
             throw new InsufficientInventoryException(
-                    "Only " + product.getInventory() + " items left in stock"
+                    "Only " + product.getInventory() + " items left in stock",
+                    HttpStatus.BAD_REQUEST
             );
         }
 

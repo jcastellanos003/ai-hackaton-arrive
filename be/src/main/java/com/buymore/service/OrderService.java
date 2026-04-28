@@ -4,6 +4,7 @@ import com.buymore.dto.OrderRequest;
 import com.buymore.dto.OrderResponse;
 import com.buymore.entity.*;
 import com.buymore.exception.InsufficientInventoryException;
+import org.springframework.http.HttpStatus;
 import com.buymore.exception.ResourceNotFoundException;
 import com.buymore.repository.OrderRepository;
 import com.buymore.repository.ProductRepository;
@@ -47,7 +48,8 @@ public class OrderService {
                 throw new InsufficientInventoryException(
                         "Only " + product.getInventory() + " item" +
                         (product.getInventory() == 1 ? "" : "s") +
-                        " left in stock for " + product.getName()
+                        " left in stock for " + product.getName(),
+                        HttpStatus.CONFLICT
                 );
             }
 
