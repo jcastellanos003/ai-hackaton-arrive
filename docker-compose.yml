@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  # ── Backend (Spring Boot) ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # H2 in-memory is the default — no external DB needed for the demo.
+      # To switch to PostgreSQL, override these and add a 'db' service below.
+      SERVER_PORT: 8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || wget -qO- http://localhost:8080/v1/products || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./fe/e-commerce
+      dockerfile: Dockerfile
+      args:
+        # Must be the URL the *browser* can reach — not container-internal.
+        NEXT_PUBLIC_API_URL: http://localhost:8080/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# ── Optional PostgreSQL (uncomment to use persistent storage) ───────────────
+#
+#  db:
+#    image: postgres:16-alpine
+#    environment:
+#      POSTGRES_DB: buymore
+#      POSTGRES_USER: buymore
+#      POSTGRES_PASSWORD: buymore_secret
+#    ports:
+#      - "5432:5432"
+#    volumes:
+#      - postgres_data:/var/lib/postgresql/data
+#
+# volumes:
+#   postgres_data:
+#
+# If you enable the db service, also add these env vars to the backend service:
+#   SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/buymore
+#   SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+#   SPRING_DATASOURCE_USERNAME: buymore
+#   SPRING_DATASOURCE_PASSWORD: buymore_secret
+#   SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+#   SPRING_JPA_HIBERNATE_DDL_AUTO: update
+#   SPRING_H2_CONSOLE_ENABLED: "false"
