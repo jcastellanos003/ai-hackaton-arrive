@@ -331,7 +331,8 @@ pnpm install
 # 3. (Optional) Create a local environment file
 #    Omit NEXT_PUBLIC_API_URL to run against the built-in mock API (no backend required)
 #    Point to the backend to use the real API
-echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
+cp .env.example .env.local
+# or manually: echo "NEXT_PUBLIC_API_URL=http://localhost:8080/v1" > .env.local
 
 # 4. Start the development server
 pnpm dev
@@ -350,10 +351,12 @@ The app is available at **http://localhost:3000**.
 
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | Base URL of the backend (e.g. `http://localhost:8080`). Leave empty to use the mock layer. |
+| `NEXT_PUBLIC_API_URL` | Base URL of the backend including the version prefix, e.g. `http://localhost:8080/v1`. Leave empty to use the mock layer. |
 | `NEXT_PUBLIC_USE_MOCKS` | Set to `"true"` to force the mock layer even when `NEXT_PUBLIC_API_URL` is set. |
 
 Both variables absent → mock mode. Either variable absent → mock mode.
+
+A ready-to-use template is provided at `fe/e-commerce/.env.example`.
 
 ---
 
@@ -386,6 +389,32 @@ spring.datasource.password=<pass>
 spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.hibernate.ddl-auto=update
 ```
+
+A template for all backend properties is provided at `be/src/main/resources/application.properties.example`.
+
+---
+
+## Docker Compose (local demo)
+
+Starts the full stack with a single command — no local Java or Node install required.
+
+```bash
+docker compose up --build
+```
+
+| Service  | URL                              |
+|----------|----------------------------------|
+| Frontend | http://localhost:3000            |
+| Backend  | http://localhost:8080/v1         |
+| H2 Console (dev) | http://localhost:8080/h2-console |
+
+Stop and remove containers:
+
+```bash
+docker compose down
+```
+
+The backend uses H2 in-memory by default inside the container (same as local dev). Data is reset each time the container restarts. See `docker-compose.yml` for details.
 
 ---
 

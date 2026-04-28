@@ -1,0 +1,50 @@
+# Backend configuration template
+# Copy to application.properties and adjust:
+#   cp application.properties.example application.properties
+
+server.port=8080
+
+# ---------------------------------------------------------------------------
+# Option A: H2 in-memory database (default — no external DB needed)
+# ---------------------------------------------------------------------------
+spring.datasource.url=jdbc:h2:mem:buymore;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;NON_KEYWORDS=ORDER
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=create-drop
+
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# ---------------------------------------------------------------------------
+# Option B: PostgreSQL (persistent storage)
+# Comment out Option A above and uncomment these lines.
+# ---------------------------------------------------------------------------
+#spring.datasource.url=jdbc:postgresql://localhost:5432/buymore
+#spring.datasource.driver-class-name=org.postgresql.Driver
+#spring.datasource.username=YOUR_DB_USER
+#spring.datasource.password=YOUR_DB_PASSWORD
+#spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+#spring.jpa.hibernate.ddl-auto=update
+#spring.h2.console.enabled=false
+
+# ---------------------------------------------------------------------------
+# JPA / Hibernate
+# ---------------------------------------------------------------------------
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.format_sql=false
+
+# ---------------------------------------------------------------------------
+# Jackson serialization
+# ---------------------------------------------------------------------------
+spring.jackson.property-naming-strategy=LOWER_CAMEL_CASE
+spring.jackson.serialization.write-dates-as-timestamps=false
+spring.jackson.default-property-inclusion=NON_NULL
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.level.com.buymore=INFO
+logging.level.org.hibernate.SQL=WARN

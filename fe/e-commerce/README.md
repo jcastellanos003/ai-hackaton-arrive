@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BuyMore — Frontend
 
-## Getting Started
+Next.js 16 frontend for the BuyMore e-commerce demo. See the [root README](../../README.md) for full project setup instructions.
 
-First, run the development server:
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # configure API URL
+pnpm install
+pnpm dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Backend base URL, e.g. `http://localhost:8080/v1`. Omit to use the built-in mock layer. |
+| `NEXT_PUBLIC_USE_MOCKS` | Set to `"true"` to force the mock layer even when `NEXT_PUBLIC_API_URL` is set. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Commands
 
-## Learn More
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Dev server with hot reload |
+| `pnpm build` | Production build |
+| `pnpm start` | Start production server (requires `pnpm build`) |
+| `pnpm lint` | Run ESLint |
 
-To learn more about Next.js, take a look at the following resources:
+## Mock Layer
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+When `NEXT_PUBLIC_API_URL` is not set, the app uses a built-in mock API with 13 seed products, simulated latency (400–800 ms), and in-memory cart/order state. No backend required.
