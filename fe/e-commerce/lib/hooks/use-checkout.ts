@@ -4,13 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, getOrder } from "@/lib/api/orders-service";
 import { queryKeys } from "@/lib/constants/query-keys";
 import type { CheckoutForm } from "@/lib/types/order";
-import type { Cart } from "@/lib/types/cart";
 
 export function useCheckout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ form, cart }: { form: CheckoutForm; cart: Cart }) =>
-      placeOrder(form, cart),
+    mutationFn: (form: CheckoutForm) => placeOrder(form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cart.all });
     },

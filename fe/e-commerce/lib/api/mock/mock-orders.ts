@@ -1,7 +1,5 @@
 import type { Cart } from "@/lib/types/cart";
-import type { CheckoutForm } from "@/lib/types/order";
 import type { Order } from "@/lib/types/order";
-import { mockClearCart } from "./mock-cart";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,16 +18,42 @@ function addBusinessDays(date: Date, days: number): Date {
   return result;
 }
 
+export type OrderBody = {
+  shipping: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+  };
+  payment: {
+    cardNumber: string;
+    cardExpiry: string;
+    cardCvc: string;
+  };
+};
+
+/**
+ * Mirrors real BE behaviour: accepts { shipping, payment } body and reads the
+ * cart from the mock's internal state (passed in by the mock dispatcher, just
+ * as the real BE reads it via X-Session-ID).
+ */
 export async function mockPlaceOrder(
-  form: CheckoutForm,
+  body: OrderBody,
   cart: Cart
 ): Promise<Order> {
   await delay(600 + Math.random() * 600);
 
+  const { mockClearCart } = await import("./mock-cart");
+
   const year = new Date().getFullYear();
   const orderNumber = `BM-${year}-${String(orderSeq++).padStart(5, "0")}`;
 
-  const deliveryDays = 3 + Math.floor(Math.random() * 3); // 3–5 business days
+  const deliveryDays = 3 + Math.floor(Math.random() * 3);
   const estimatedDelivery = addBusinessDays(new Date(), deliveryDays)
     .toISOString()
     .slice(0, 10);
@@ -49,15 +73,13 @@ export async function mockPlaceOrder(
     taxes: cart.taxes,
     shipping: cart.shipping,
     total: cart.total,
-    customerName: `${form.firstName} ${form.lastName}`,
-    email: form.email,
+    customerName: `${body.shipping.firstName} ${body.shipping.lastName}`,
+    email: body.shipping.email,
     estimatedDelivery,
     createdAt: new Date().toISOString(),
   };
 
-  // Store for later retrieval
   mockOrders.set(order.id, order);
-
   await mockClearCart();
 
   return order;

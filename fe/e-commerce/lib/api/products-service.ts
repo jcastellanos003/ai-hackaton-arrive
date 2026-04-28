@@ -9,7 +9,10 @@ import type {
 export async function getProducts(
   filters?: ProductFilters
 ): Promise<ProductsResponse> {
-  return apiClient.get<ProductsResponse>("products", filters);
+  return apiClient.get<ProductsResponse>(
+    "products",
+    filters as Record<string, unknown> | undefined
+  );
 }
 
 export async function getProductById(id: string): Promise<Product> {
@@ -17,7 +20,7 @@ export async function getProductById(id: string): Promise<Product> {
 }
 
 export async function getRelatedProducts(
-  productId: string,
+  productId: string
 ): Promise<{ data: Product[] }> {
   return apiClient.get<{ data: Product[] }>(`products/${productId}/related`);
 }

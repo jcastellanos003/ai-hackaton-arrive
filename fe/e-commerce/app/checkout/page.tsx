@@ -33,7 +33,7 @@ export default function CheckoutPage() {
       return;
     }
     checkout.mutate(
-      { form, cart },
+      form,
       {
         onSuccess: (order) => {
           toast.success("Order placed successfully!");

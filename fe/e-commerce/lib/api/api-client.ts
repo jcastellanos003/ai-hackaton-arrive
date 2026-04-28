@@ -4,9 +4,7 @@
  * Services never know which path is taken — they only call apiClient methods.
  */
 
-import type { ProductFilters, ProductsResponse, Category } from "@/lib/types/product";
-import type { Cart } from "@/lib/types/cart";
-import type { Order, CheckoutForm } from "@/lib/types/order";
+import type { OrderBody } from "./mock/mock-orders";
 
 const USE_MOCK =
   process.env.NEXT_PUBLIC_USE_MOCKS === "true" ||
@@ -14,15 +12,38 @@ const USE_MOCK =
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-// ── Real fetch helpers ──────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** camelCase → snake_case for query param keys */
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+}
+
+/** Converts a params object to a URLSearchParams, mapping keys to snake_case */
+function buildQueryString(params: Record<string, unknown>): string {
+  const qs = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      qs.set(toSnakeCase(key), String(val));
+    }
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+// ── Real fetch ───────────────────────────────────────────────────────────────
 
 async function realRequest<T>(
   method: string,
   path: string,
+  params?: Record<string, unknown>,
   body?: unknown,
   extraHeaders?: Record<string, string>
 ): Promise<T> {
-  const url = `${BASE_URL}/${path}`;
+  const qs =
+    method === "GET" && params ? buildQueryString(params) : "";
+  const url = `${BASE_URL}/${path}${qs}`;
+
   const res = await fetch(url, {
     method,
     headers: {
@@ -40,11 +61,12 @@ async function realRequest<T>(
   return res.json() as Promise<T>;
 }
 
-// ── Mock dispatch helpers ───────────────────────────────────────────────────
+// ── Mock dispatch ────────────────────────────────────────────────────────────
 
 async function mockDispatch<T>(
   method: string,
   path: string,
+  params?: Record<string, unknown>,
   body?: unknown
 ): Promise<T> {
   const {
@@ -62,14 +84,13 @@ async function mockDispatch<T>(
   } = await import("./mock/mock-cart");
   const { mockPlaceOrder, mockGetOrder } = await import("./mock/mock-orders");
 
-  // Products
-  if (method === "GET" && path.startsWith("products/categories")) {
+  // Products — order matters: categories and related must come before :id
+  if (method === "GET" && path === "products/categories") {
     return mockGetCategories() as Promise<T>;
   }
   const relatedMatch = path.match(/^products\/([^/]+)\/related$/);
   if (method === "GET" && relatedMatch) {
     const id = relatedMatch[1];
-    // category unknown at dispatch level — fetch product first
     const product = await mockGetProductById(id);
     return mockGetRelatedProducts(id, product.category) as Promise<T>;
   }
@@ -77,9 +98,8 @@ async function mockDispatch<T>(
   if (method === "GET" && productByIdMatch) {
     return mockGetProductById(productByIdMatch[1]) as Promise<T>;
   }
-  if (method === "GET" && path.startsWith("products")) {
-    const params = body as ProductFilters | undefined;
-    return mockGetProducts(params) as Promise<T>;
+  if (method === "GET" && path === "products") {
+    return mockGetProducts(params as Parameters<typeof mockGetProducts>[0]) as Promise<T>;
   }
 
   // Cart
@@ -103,10 +123,10 @@ async function mockDispatch<T>(
     return mockClearCart() as Promise<T>;
   }
 
-  // Orders
+  // Orders — mock reads its own cart state internally (mirrors real BE behaviour)
   if (method === "POST" && path === "orders") {
-    const { form, cart } = body as { form: CheckoutForm; cart: Cart };
-    return mockPlaceOrder(form, cart) as Promise<T>;
+    const cart = await mockGetCart();
+    return mockPlaceOrder(body as OrderBody, cart) as Promise<T>;
   }
   const orderByIdMatch = path.match(/^orders\/([^/]+)$/);
   if (method === "GET" && orderByIdMatch) {
@@ -116,28 +136,43 @@ async function mockDispatch<T>(
   throw new Error(`[mock] Unhandled: ${method} ${path}`);
 }
 
-// ── Public API client ───────────────────────────────────────────────────────
+// ── Public API client ────────────────────────────────────────────────────────
 
 export const apiClient = {
-  get: <T>(path: string, params?: unknown, headers?: Record<string, string>) =>
+  get: <T>(
+    path: string,
+    params?: Record<string, unknown>,
+    headers?: Record<string, string>
+  ) =>
     USE_MOCK
       ? mockDispatch<T>("GET", path, params)
-      : realRequest<T>("GET", path, undefined, headers),
+      : realRequest<T>("GET", path, params, undefined, headers),
 
-  post: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
+  post: <T>(
+    path: string,
+    body: unknown,
+    headers?: Record<string, string>
+  ) =>
     USE_MOCK
-      ? mockDispatch<T>("POST", path, body)
-      : realRequest<T>("POST", path, body, headers),
+      ? mockDispatch<T>("POST", path, undefined, body)
+      : realRequest<T>("POST", path, undefined, body, headers),
 
-  patch: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
+  patch: <T>(
+    path: string,
+    body: unknown,
+    headers?: Record<string, string>
+  ) =>
     USE_MOCK
-      ? mockDispatch<T>("PATCH", path, body)
-      : realRequest<T>("PATCH", path, body, headers),
+      ? mockDispatch<T>("PATCH", path, undefined, body)
+      : realRequest<T>("PATCH", path, undefined, body, headers),
 
-  delete: <T>(path: string, headers?: Record<string, string>) =>
+  delete: <T>(
+    path: string,
+    headers?: Record<string, string>
+  ) =>
     USE_MOCK
       ? mockDispatch<T>("DELETE", path)
-      : realRequest<T>("DELETE", path, undefined, headers),
+      : realRequest<T>("DELETE", path, undefined, undefined, headers),
 };
 
 export { USE_MOCK };
